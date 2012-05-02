@@ -46,7 +46,10 @@ public class RaopServer extends Thread {
         try {
             this.aesCipher = Cipher.getInstance("AES/CBC/NOPADDING");
             receiveSocket = new DatagramSocket(port);
-
+            
+            line = JAirPort.visuals.setServer(this, new AudioFormat(session.getFormat().getSampleRate(), session.getFormat().getSampleSize(), 2, true, true));
+            line.open();
+            line.start();
             
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -89,22 +92,23 @@ public class RaopServer extends Thread {
         }
         return j;
     }
+    
     int lastlen;
     byte[] lastbuf;
-
     private void putDataInBuffer(int seqNo, byte[] data, int offset, int len) {
         if (lastlen < len) {
             lastbuf = new byte[len];
             System.out.println("bigger buffer size " + len +" > "+lastlen);
             lastlen = len;
         }//else System.out.println("same/smaller buffer size "+len+" < "+lastlen);
+        //byte[] out = new byte[len];
         decryptAes(data, offset, len, lastbuf);
         int samplesInBytes = AlacDecodeUtils.decode_frame(alac, lastbuf, outbuffer, outbuffer.length);
         assert (samplesInBytes == session.getFormat().getFrameSize() * 4);
 
         int lenBytes = convertSampleBufferToByteBuffer(outbuffer, samplesInBytes >> 1, outbufferBytes);
         line.write(outbufferBytes, 0, lenBytes);
-        line.flush();
+        //line.flush();
         //if(seqNo + 1 < lastSeqNo) {
         //  System.out.println("bla " + seqNo  + " " + lastSeqNo);
         //}
@@ -113,17 +117,7 @@ public class RaopServer extends Thread {
 
     @Override
     public void run() {
-        
-        try {
-            line = JAirPort.visuals.setServer(this, new AudioFormat(session.getFormat().getSampleRate(), session.getFormat().getSampleSize(), 2, true, true));
-            line.start();
-            line.open();
-        } catch (LineUnavailableException ex) {
-            ex.printStackTrace();
-            return;
-        }
-        
-        byte[] b = new byte[2048];
+        byte[] b = new byte[4096];
         DatagramPacket packet = new DatagramPacket(b, b.length);
         while (!Thread.interrupted() && run) {
             try {
@@ -160,6 +154,7 @@ public class RaopServer extends Thread {
         line.drain();
         line.close();
         line.stop();
+        receiveSocket.close();
         run = false;
         line = null;
     }

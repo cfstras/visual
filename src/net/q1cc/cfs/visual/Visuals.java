@@ -4,6 +4,9 @@
  */
 package net.q1cc.cfs.visual;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Control;
@@ -13,6 +16,9 @@ import javax.sound.sampled.LineListener;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
 import net.q1cc.cfs.visual.jairport.RaopServer;
+import net.q1cc.cfs.visual.ogl.RingBufferF;
+import net.q1cc.cfs.visual.ogl.RingBufferI;
+import net.q1cc.cfs.visual.ogl.SoundState;
 
 /**
  *
@@ -27,9 +33,18 @@ public class Visuals extends Thread {
     private int buflen;
     private boolean bufferFinished=true;
     
+    LineWrapper lw;
     private boolean waitForData=false;
     boolean run=true;
     long waitingSince;
+    
+    int bytesPerSample;
+    float samplesPerSecond;
+    int channels;
+    boolean isBigEndian;
+    int maxLevel;
+    
+    SoundState soundState;
     
     OGLMain ogl;
     AudioFormat audioFormat;
@@ -45,8 +60,29 @@ public class Visuals extends Thread {
         audioFormat = af;
         DataLine.Info info = new DataLine.Info(SourceDataLine.class, af);
         SourceDataLine sdl = (SourceDataLine) AudioSystem.getLine(info);
-        LineWrapper lw = new LineWrapper(sdl);
+        //System.out.println(sdl);
+        lw = new LineWrapper(sdl,this);
         
+        System.out.println(info.toString()+"\n"+af.toString());
+        
+        //do some prep stuff
+        bytesPerSample = af.getSampleSizeInBits() >> 3;
+        samplesPerSecond = af.getSampleRate();
+        channels = af.getChannels();
+        isBigEndian = af.isBigEndian();
+        maxLevel = 1 << (af.getSampleSizeInBits()); // TODO if signed integer
+        if(bytesPerSample!=2) {
+            System.out.println("Warning: values will be rubbish because i expect 16-bit values as opposed to "+af.getSampleSizeInBits());
+        }
+        
+        //TODO signed
+        
+        //setup SoundState
+        soundState = new SoundState(info);
+        soundState.lastvolume = new RingBufferF(100);
+        soundState.lastvolume1 = new RingBufferF(10);
+        soundState.lastvolume5 = new RingBufferF(10);
+        soundState.lastvolume10 = new RingBufferF(10);
         return lw;
     }
     
@@ -105,19 +141,34 @@ public class Visuals extends Thread {
          * info anschauen!
          * 
          */
+        ByteBuffer bb = ByteBuffer.wrap(buffer, 0,buflen);
+        bb.order(isBigEndian?ByteOrder.BIG_ENDIAN:ByteOrder.LITTLE_ENDIAN);
+        ShortBuffer ib = bb.asShortBuffer();
+        int size = buflen>>1; // TODO if moar bits
         
-        StringBuilder s = new StringBuilder();
-        for(int i=0;i<buflen;i++) {
-            s.append(((int)buffer[i]));
-            s.append(" ");
+        float acc=0;
+        short v=0;
+        for(int i=0;i<size;i++) {
+            v=ib.get(i);
+            if(v>0) acc+=v;
+            else acc-=v;
         }
-        s.append("buffer ends here");
-        System.out.println(s.toString());
+        
+        acc /= size*channels*maxLevel; // durchschnitt berechnen
+        //TODO split this into 1/100ths of a second
+        soundState.volume=acc;
+        soundState.lastvolume.push(acc);
+        //TODO lastvolume1, 5 & 10
+        
+        //System.out.println(lw.sdl.getLevel()+ "  "+lw.sdl.getMicrosecondPosition());
+        //System.out.println(s.toString());
     }
     
     private class LineWrapper implements SourceDataLine {
         SourceDataLine sdl;
-        public LineWrapper(SourceDataLine sdl) {
+        Visuals v;
+        public LineWrapper(SourceDataLine sdl, Visuals parent) {
+            v=parent;
             this.sdl=sdl;
         }
         @Override
@@ -132,14 +183,14 @@ public class Visuals extends Thread {
 
         @Override
         public int write(byte[] b, int off, int len) {
-            if(bufferFinished) {
-                if(len>buffer.length){
-                    System.out.println("increasing buffer size from "+buffer.length+" to "+len);
-                    buffer = new byte[len];
+            if(v.bufferFinished) {
+                if(len>v.buffer.length){
+                    System.out.println("increasing buffer size from "+v.buffer.length+" to "+len);
+                    v.buffer = new byte[len];
                 }
-                System.arraycopy(b, off, buffer, 0, len);
-                buflen=len;
-                bufferFinished=false;
+                System.arraycopy(b, off, v.buffer, 0, len);
+                v.buflen=len;
+                v.bufferFinished=false;
                 //interrupt?
             }
             return sdl.write(b, off, len);
