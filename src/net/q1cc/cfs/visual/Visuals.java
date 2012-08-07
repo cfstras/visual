@@ -16,9 +16,7 @@ import javax.sound.sampled.LineListener;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
 import net.q1cc.cfs.visual.jairport.RaopServer;
-import net.q1cc.cfs.visual.ogl.RingBufferF;
-import net.q1cc.cfs.visual.ogl.RingBufferI;
-import net.q1cc.cfs.visual.ogl.SoundState;
+import net.q1cc.cfs.visual.ogl.*;
 
 /**
  *
@@ -30,6 +28,7 @@ public class Visuals extends Thread {
     final static int waitBeforeIdle = 3000;
     
     private byte[] buffer;
+    private byte[] newbuffer;
     private int buflen;
     private boolean bufferFinished=true;
     
@@ -53,6 +52,15 @@ public class Visuals extends Thread {
         super("VisualWorker");
         waitingSince = System.currentTimeMillis();
         buffer=new byte[1];
+        newbuffer=new byte[1];
+        
+        //setup SoundState
+        soundState = new SoundState(null);
+        soundState.lastvolume = new RingBufferF(128);
+        soundState.lastvolume1 = new RingBufferF(128);
+        soundState.lastvolume5 = new RingBufferF(128);
+        soundState.lastvolume10 = new RingBufferF(128);
+        soundState.sourceBuffer = ShortBuffer.allocate(4);
     }
     
     public SourceDataLine setServer(RaopServer s,AudioFormat af) throws LineUnavailableException {
@@ -76,24 +84,19 @@ public class Visuals extends Thread {
         }
         
         //TODO signed
-        
-        //setup SoundState
-        soundState = new SoundState(info);
-        soundState.lastvolume = new RingBufferF(100);
-        soundState.lastvolume1 = new RingBufferF(10);
-        soundState.lastvolume5 = new RingBufferF(10);
-        soundState.lastvolume10 = new RingBufferF(10);
+        soundState.sdlinfo=info;
         return lw;
     }
     
     @Override public void run() {
         //init OpenGL
-        ogl = new OGLMain();
+        ogl = new OGLMain(soundState);
         ogl.start();
         
         //run startup animation
         ogl.triggerAnimation(OGLMain.Animation.startup);
         
+        System.out.println("Init. Waiting for connection.");
         //start waiting for data
         while(run) {
             if(waitForData) {
@@ -117,12 +120,14 @@ public class Visuals extends Thread {
         waitForData=true;
         waitingSince = Integer.MAX_VALUE-waitBeforeIdle;
         interrupt();
+        System.out.println("connected");
         ogl.triggerAnimation(OGLMain.Animation.connected);
     }
     void sdlStopped() {
         waitForData=false;
         interrupt();
         waitingSince = System.currentTimeMillis();
+        System.out.println("disconnected");
         ogl.triggerAnimation(OGLMain.Animation.disconnected);
         
     }
@@ -141,26 +146,31 @@ public class Visuals extends Thread {
          * info anschauen!
          * 
          */
-        ByteBuffer bb = ByteBuffer.wrap(buffer, 0,buflen);
-        bb.order(isBigEndian?ByteOrder.BIG_ENDIAN:ByteOrder.LITTLE_ENDIAN);
-        ShortBuffer ib = bb.asShortBuffer();
-        int size = buflen>>1; // TODO if moar bits
+
+        int size = soundState.sourceBuffer.capacity();//buflen>>1; // TODO if moar bits
         
         float acc=0;
-        short v=0;
-        for(int i=0;i<size;i++) {
-            v=ib.get(i);
+        short v=0; short lv = 0;
+        //left
+        for(int i=0;i<size;i+=2) {
+            v=soundState.sourceBuffer.get(i);
+            if(v>0) acc+=v;
+            else acc-=v;
+        }
+        //right
+        for(int i=1;i<size;i+=2) {
+            v=soundState.sourceBuffer.get(i);
             if(v>0) acc+=v;
             else acc-=v;
         }
         
-        acc /= size*channels*maxLevel; // durchschnitt berechnen
+        acc /= (float)channels*(float)maxLevel/2.0f*(float)size/2.0f; // durchschnitt berechnen
         //TODO split this into 1/100ths of a second
         soundState.volume=acc;
         soundState.lastvolume.push(acc);
         //TODO lastvolume1, 5 & 10
         
-        //System.out.println(lw.sdl.getLevel()+ "  "+lw.sdl.getMicrosecondPosition());
+        System.out.println(soundState.volume+" "+size);
         //System.out.println(s.toString());
     }
     
@@ -184,13 +194,21 @@ public class Visuals extends Thread {
         @Override
         public int write(byte[] b, int off, int len) {
             if(v.bufferFinished) {
-                if(len>v.buffer.length){
+                if(len>v.newbuffer.length){
                     System.out.println("increasing buffer size from "+v.buffer.length+" to "+len);
-                    v.buffer = new byte[len];
+                    v.newbuffer = new byte[len];
                 }
-                System.arraycopy(b, off, v.buffer, 0, len);
+                System.arraycopy(b, off, v.newbuffer, 0, len);
                 v.buflen=len;
                 v.bufferFinished=false;
+                byte[] tmp = v.buffer;
+                v.buffer=v.newbuffer;
+                v.newbuffer=tmp;
+                v.soundState.buffer=v.buffer;
+                
+                ByteBuffer bb = ByteBuffer.wrap(v.buffer, 0,v.buflen);
+                bb.order(isBigEndian?ByteOrder.BIG_ENDIAN:ByteOrder.LITTLE_ENDIAN);
+                v.soundState.sourceBuffer = bb.asShortBuffer();
                 //interrupt?
             }
             return sdl.write(b, off, len);

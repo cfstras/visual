@@ -4,6 +4,7 @@
  */
 package net.q1cc.cfs.visual.ogl;
 
+import java.nio.ShortBuffer;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.SourceDataLine;
 
@@ -13,7 +14,7 @@ import javax.sound.sampled.SourceDataLine;
  */
 public class SoundState {
     
-    SourceDataLine.Info sdlinfo;
+    public SourceDataLine.Info sdlinfo;
     
     /**
      * the volume of the stream throughout the last received 441 samples
@@ -29,7 +30,7 @@ public class SoundState {
      */
     public float volume1;
     /**
-     * the last 10 values of lastvolume1
+     * the last 128 values of lastvolume1
      */
     public RingBufferF lastvolume1;
     /**
@@ -37,7 +38,7 @@ public class SoundState {
      */
     public float volume5;
     /**
-     * the last 10 values of lastvolume5
+     * the last 128 values of lastvolume5
      */
     public RingBufferF lastvolume5;
     /**
@@ -45,9 +46,12 @@ public class SoundState {
      */
     public float volume10;
     /**
-     * the last 10 values of lastvolume10
+     * the last 128 values of lastvolume10
      */
     public RingBufferF lastvolume10;
+    
+    public ShortBuffer sourceBuffer;
+    public byte[] buffer;
     
     public SoundState(SourceDataLine.Info sdlinfo) {
         this.sdlinfo=sdlinfo;

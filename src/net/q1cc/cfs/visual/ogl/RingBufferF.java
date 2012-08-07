@@ -9,7 +9,8 @@ package net.q1cc.cfs.visual.ogl;
  * @author claus
  */
 public class RingBufferF {
-    int size;
+    
+    int capacity;
     float[] buf;
     /*
      * Points to the first value
@@ -21,19 +22,19 @@ public class RingBufferF {
     int endpos;
     
     public RingBufferF(int size) {
-        this.size=size;
+        this.capacity=size;
         if(size<=0) {
             System.out.println("Error: Ringbuffer size cannot be "+size
                     +". Next time you try this, I will throw you a NPE in your face.");
             return;
         }
-        buf = new float[size];
+        buf = new float[capacity];
         startpos = 0;
         endpos = -1;
     }
     
     public float peek(int pos) {
-        return buf[(startpos+pos)%size];
+        return buf[(startpos+pos)%capacity];
     }
     public float peek() {
         return buf[endpos];
@@ -42,10 +43,10 @@ public class RingBufferF {
         return buf[startpos];
     }
     public void push(float val) {
-        buf[(endpos+1)%size]=val;
-        endpos = (endpos+1)%size;
+        buf[(endpos+1)%capacity]=val;
+        endpos = (endpos+1)%capacity;
         if(endpos == startpos) {
-            startpos = (endpos+1)%size;
+            startpos = (endpos+1)%capacity;
         }
     }
     public float pop() {
@@ -56,6 +57,10 @@ public class RingBufferF {
         return buf[endpos];
     }
     
+    /**
+     * the actual amount of values stored.
+     * @return 
+     */
     public int size() {
         return endpos-startpos+1;
     }
