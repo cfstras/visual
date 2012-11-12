@@ -195,7 +195,7 @@ public class Visuals extends Thread {
         public int write(byte[] b, int off, int len) {
             if(v.bufferFinished) {
                 if(len>v.newbuffer.length){
-                    System.out.println("increasing buffer size from "+v.buffer.length+" to "+len);
+                    System.out.println("increasing audio buffer from "+v.buffer.length+" to "+len);
                     v.newbuffer = new byte[len];
                 }
                 System.arraycopy(b, off, v.newbuffer, 0, len);

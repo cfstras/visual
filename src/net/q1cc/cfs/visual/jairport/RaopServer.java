@@ -36,7 +36,10 @@ public class RaopServer extends Thread {
     private int[] outbuffer;
     private byte[] outbufferBytes;
     public boolean run = true;
-
+    
+    int lastlen = 1381;
+    byte[] lastbuf;
+    
     public RaopServer(RaopSession session) {
         super("RaopServer " + session.getId());
 
@@ -68,6 +71,7 @@ public class RaopServer extends Thread {
 
         outbuffer = new int[frameSize * 4];
         outbufferBytes = new byte[outbuffer.length * 2];
+        lastbuf = new byte[lastlen];
     }
 
     public void requestRtpResend(int first, int last) throws IOException {
@@ -93,12 +97,11 @@ public class RaopServer extends Thread {
         return j;
     }
     
-    int lastlen;
-    byte[] lastbuf;
+    
     private void putDataInBuffer(int seqNo, byte[] data, int offset, int len) {
         if (lastlen < len) {
             lastbuf = new byte[len];
-            System.out.println("bigger buffer size " + len +" > "+lastlen);
+            System.out.println("bigger input buffer size " + len +" > "+lastlen);
             lastlen = len;
         }//else System.out.println("same/smaller buffer size "+len+" < "+lastlen);
         //byte[] out = new byte[len];

@@ -79,7 +79,8 @@ public class RtspRequestHandler extends SimpleChannelUpstreamHandler {
 
     String clientInstance = request.getHeader("Client-Instance");
     if (Utils.isNullOrEmpty(clientInstance)) {
-      throw new RuntimeException("No Client Instance given");
+        clientInstance = "ipod";
+        //throw new RuntimeException("No Client Instance given");
     }
 
     HttpMethod method = request.getMethod();

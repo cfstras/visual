@@ -30,13 +30,14 @@ public class JAirPort {
     dns = JmmDNS.Factory.getInstance();
     ((JmmDNSImpl)dns).inetAddressAdded(new NetworkTopologyEventImpl(JmDNS.create(InetAddress.getByName("localhost")), InetAddress.getByName("localhost")));
     
-    //now init OGL
-    visuals = new Visuals();
-    visuals.start();
     Thread.sleep(1000); // If this isn't done the Announcement sometimes doesn't go out on the local interface
     
     dns.registerService(info);
     System.out.println("Service registered");
+    
+     //now init OGL
+    visuals = new Visuals();
+    visuals.start();
     
     // Start RtspServer
     RtspServer server = new RtspServer(port);

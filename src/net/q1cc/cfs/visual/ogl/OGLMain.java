@@ -36,8 +36,10 @@ public class OGLMain extends Thread {
     int vaoLine;
     int vboLineR;
     int vboLineL;
+    int vboVolume;
     FloatBuffer lineBufR;
     FloatBuffer lineBufL;
+    FloatBuffer volumeBuf;
     
     public OGLMain(SoundState st) {
         //init lists etc
@@ -55,6 +57,7 @@ public class OGLMain extends Thread {
                 if(Display.isCloseRequested()) run=false;
             }
             Display.destroy();
+            System.exit(0);
         } catch (LWJGLException ex) {
             ex.printStackTrace();
         }
@@ -88,53 +91,81 @@ public class OGLMain extends Thread {
         glBindVertexArray(vaoLine);
         vboLineL = glGenBuffers();
         vboLineR = glGenBuffers();
-        //glBindBuffer(GL_ARRAY_BUFFER, vboLine);
-        //glBufferData(GL_ARRAY_BUFFER, 128*Float.SIZE*2/8, GL_STREAM_DRAW);
-        
-        //lineBuf = BufferUtils.createFloatBuffer(st.lastvolume.capacity*2);
-        lineBufR = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity()/2*2);
-        lineBufL = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity()/2*2);
+        vboVolume = glGenBuffers();
+
+        lineBufR = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity());
+        lineBufL = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity());
+        volumeBuf = BufferUtils.createFloatBuffer(st.lastvolume.capacity*2);
     }
     
     void drawFrame() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glColor3f(1, 1, 1);
-        if(lineBufR.capacity()!=st.sourceBuffer.capacity()/2*2) {
-            lineBufR = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity()/2*2);
-            lineBufL = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity()/2*2);
+        
+        if(lineBufR.capacity()!=st.sourceBuffer.capacity()) {
+            lineBufR = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity());
+            lineBufL = BufferUtils.createFloatBuffer(st.sourceBuffer.capacity());
+            System.out.println("osci buffer increased to "+lineBufL.capacity());
         }
-        lineBufR.rewind();
-        lineBufL.rewind();
+
+        
         //for(int i=0;i<st.lastvolume.capacity;i++) {
-        for(int i=1;i<st.sourceBuffer.capacity();i+=2) {
-            //lineBuf.put(i/(float)(st.lastvolume.capacity/2) - 1f);
-            lineBufR.put(i/(float)(st.sourceBuffer.capacity()/5.0f) - 0.9f);
-            //lineBuf.put(st.lastvolume.buf[i]);
-            lineBufR.put(st.sourceBuffer.get(i)/(float)Short.MAX_VALUE/2.0f-0.5f);
-        }
-        for(int i=0;i<st.sourceBuffer.capacity();i+=2) {
-            //lineBuf.put(i/(float)(st.lastvolume.capacity/2) - 1f);
-            lineBufL.put(i/(float)(st.sourceBuffer.capacity()/5.0f) - 0.9f);
-            //lineBuf.put(st.lastvolume.buf[i]);
-            lineBufL.put(st.sourceBuffer.get(i)/(float)Short.MAX_VALUE/2.0f+0.5f);
-        }
         lineBufR.rewind();
-        lineBufL.rewind();
-        glBindBuffer(GL_ARRAY_BUFFER,vboLineR);
+        int n=0;
+        while(st.sourceBuffer.hasRemaining()) {
+            lineBufR.put(n/(float)(st.sourceBuffer.capacity()) - 0.9f);
+            lineBufR.put(st.sourceBuffer.get()/(float)Short.MAX_VALUE/2.0f-0.5f);
+            st.sourceBuffer.get();
+            n++;
+        }
+        st.sourceBuffer.rewind();
+        lineBufR.flip();
+        
+//        lineBufL.rewind();
+//        n=0;
+//        while(st.sourceBuffer.hasRemaining()) {
+//            lineBufL.put(n/(float)(st.sourceBuffer.capacity()) - 0.9f);
+//            st.sourceBuffer.get();
+//            lineBufL.put(st.sourceBuffer.get()/(float)Short.MAX_VALUE/2.0f+0.5f);
+//            n++;
+//        }
+//        st.sourceBuffer.rewind();
+//        lineBufL.flip();
+        
+//        volumeBuf.rewind();
+//        for(int i=0;i<st.lastvolume.capacity;i++) {
+//            volumeBuf.put((float)i/(float)(st.lastvolume.capacity));
+//            volumeBuf.put(0.5f);//st.lastvolume.buf[i]);
+//        }
+//        volumeBuf.rewind();
+        
+        glBindBuffer(GL_ARRAY_BUFFER, vboLineR);
         glBufferData(GL_ARRAY_BUFFER, lineBufR,GL_STREAM_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER,vboLineL);
+        glBindBuffer(GL_ARRAY_BUFFER, vboLineL);
         glBufferData(GL_ARRAY_BUFFER, lineBufL,GL_STREAM_DRAW);
         
+        //glBindBuffer(GL_ARRAY_BUFFER,vboVolume);
+        //glBufferData(GL_ARRAY_BUFFER,volumeBuf,GL_STREAM_DRAW);
+        
         glEnableClientState(GL_VERTEX_ARRAY);
-        
-        glBindBuffer(GL_ARRAY_BUFFER,vboLineR);
-        glVertexPointer(2, GL_FLOAT, 0, 0);
-        glDrawArrays(GL_LINE_STRIP, 0,st.lastvolume.capacity);
-        
+        glColor3f(0.0f, 1, 0.0f);
         glBindBuffer(GL_ARRAY_BUFFER,vboLineL);
         glVertexPointer(2, GL_FLOAT, 0, 0);
-        glDrawArrays(GL_LINE_STRIP, 0,st.lastvolume.capacity);
+        glDrawArrays(GL_POINTS, 0,st.sourceBuffer.limit());
+        glDisableClientState(GL_VERTEX_ARRAY);
         
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glColor3f(0.0f, 0.5f, 1.0f);
+        glBindBuffer(GL_ARRAY_BUFFER,vboLineR);
+        glVertexPointer(2, GL_FLOAT, 0, 0);
+        glDrawArrays(GL_POINTS, 0,st.sourceBuffer.limit());
+        glDisableClientState(GL_VERTEX_ARRAY);
+        
+        glColor3f(1.0f, 0.3f, 0.3f);
+        //glBindBuffer(GL_ARRAY_BUFFER,vboVolume);
+        //glVertexPointer(2, GL_FLOAT, 0, 0);
+        //glDrawArrays(GL_LINE_STRIP, 0,st.lastvolume.capacity);
+        
+        glBindBuffer(GL_ARRAY_BUFFER,0);
         Display.update();
     }
     
@@ -144,7 +175,7 @@ public class OGLMain extends Thread {
     }
     
     
-    public enum Animation{
+    public enum Animation {
         startSong,
         endSong,
         startup,
